@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { Layout, Menu, Tag, Tooltip, message, Dropdown } from 'antd';
 import {
   InboxOutlined, BarChartOutlined, UserOutlined, HomeOutlined,
-  FileTextOutlined, CopyOutlined, LogoutOutlined,
+  FileTextOutlined, CopyOutlined, LogoutOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import { systemApi } from '../api';
 
 const { Header, Sider, Content } = Layout;
 
-const menuItems = [
+const commonMenus = [
   { key: 'inventory', icon: HomeOutlined, label: '库存管理' },
   { key: 'products', icon: InboxOutlined, label: '商品管理' },
   { key: 'departments', icon: UserOutlined, label: '部门管理' },
@@ -26,6 +26,7 @@ interface LayoutProps {
 
 export default function AppLayout({ currentPage, onPageChange, children, username, onLogout }: LayoutProps) {
   const [lanUrl, setLanUrl] = useState('');
+  const isAdmin = username === 'admin';
 
   useEffect(() => {
     systemApi.getInfo().then(res => {
@@ -40,6 +41,11 @@ export default function AppLayout({ currentPage, onPageChange, children, usernam
       message.success('已复制，分享给局域网其他电脑');
     } catch { message.error('复制失败'); }
   };
+
+  const menuItems: { key: string; icon: React.ReactNode; label: string }[] = [
+    ...commonMenus.map(m => ({ key: m.key, icon: <m.icon />, label: m.label })),
+    ...(isAdmin ? [{ key: 'accounts', icon: <SettingOutlined />, label: '账号管理' }] : []),
+  ];
 
   return (
     <Layout>
@@ -69,7 +75,7 @@ export default function AppLayout({ currentPage, onPageChange, children, usernam
         <Sider theme="dark" style={{ background: '#001529' }}>
           <Menu mode="inline" selectedKeys={[currentPage]}
             style={{ height: '100%', borderRight: 0 }}
-            items={menuItems.map(item => ({ key: item.key, icon: <item.icon />, label: item.label }))}
+            items={menuItems.map(item => ({ key: item.key, icon: item.icon, label: item.label }))}
             onClick={({ key }) => onPageChange(key)}
           />
         </Sider>

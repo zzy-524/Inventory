@@ -53,10 +53,14 @@ export const stockRecordApi = {
 };
 
 export const exportApi = {
-  exportData: (type: string, format: 'json' | 'csv' = 'json') =>
-    api.post(`/api/export/${type}`, { format }, { responseType: 'blob' }),
-  importData: (type: string, data: Record<string, unknown>[]) =>
-    api.post(`/api/import/${type}`, { data }),
+  exportData: (type: string) =>
+    api.post(`/api/export/${type}`, {}, { responseType: 'blob' }),
+};
+
+export const userApi = {
+  getAll: () => api.get<{ id: number; username: string; role: string; created_at: string }[]>('/api/users'),
+  remove: (id: number) => api.delete(`/api/users/${id}`),
+  resetPassword: (id: number, password: string) => api.put(`/api/users/${id}/reset-password`, { password }),
 };
 
 export const tableConfigApi = {

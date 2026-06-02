@@ -1,12 +1,12 @@
 /**
  * 库存管理系统 - 后端服务器
- * 纯 Node.js 内置模块，0 外部依赖
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const XLSX = require('xlsx');
 
 // ====== 数据存储 ======
 // 判断是否在应用包内运行
@@ -149,6 +149,32 @@ const MIME = {
   '.map': 'application/json',
 };
 
+// ====== multipart/form-data 解析 ======
+function splitMultiPart(buf, boundary) {
+  const parts = [];
+  const delim = Buffer.from('--' + boundary);
+  const endDelim = Buffer.from('--' + boundary + '--');
+  let start = 0;
+  while (start < buf.length) {
+    const idx = buf.indexOf(delim, start);
+    if (idx === -1) break;
+    const partStart = buf.indexOf(Buffer.from('\r\n\r\n'), idx);
+    if (partStart === -1) break;
+    const headerEnd = partStart + 4;
+    const nextDelim = buf.indexOf(delim, headerEnd);
+    const partEnd = nextDelim !== -1 ? nextDelim - 2 : buf.indexOf(endDelim, headerEnd);
+    if (partEnd === -1 || partEnd <= headerEnd) break;
+    const headerBuf = buf.slice(idx + delim.length, partStart);
+    const data = buf.slice(headerEnd, partEnd);
+    const headers = headerBuf.toString().split('\r\n');
+    const cd = headers.find(h => h.startsWith('Content-Disposition')) || '';
+    const filenameMatch = cd.match(/filename="?([^"]*)"?/);
+    parts.push({ data, filename: filenameMatch ? filenameMatch[1] : null, headers });
+    start = partEnd + delim.length;
+  }
+  return parts;
+}
+
 // ====== 路由处理 ======
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -256,12 +282,10 @@ async function handleAPI(req, res, method, pathname) {
     return sendJSON(res, 200, { id: record.id });
   }
 
-  // POST /api/export/:type
+  // POST /api/export/:type（导出 xlsx）
   const exportMatch = pathname.match(/^\/api\/export\/(\w[\w-]*)$/);
   if (method === 'POST' && exportMatch) {
     const type = exportMatch[1];
-    const body = await parseBody(req);
-    const format = body.format || 'json';
     let data = [];
     switch (type) {
       case 'departments': data = store.departments; break;
@@ -276,33 +300,51 @@ async function handleAPI(req, res, method, pathname) {
       case 'stock-records': data = [...store.stockRecords].sort((a, b) => b.created_at.localeCompare(a.created_at)); break;
       default: return sendJSON(res, 400, { error: '无效的数据类型' });
     }
-    if (format === 'csv') {
-      if (!data.length) return sendText(res, 200, 'text/csv; charset=utf-8', '', `${type}.csv`);
-      const headers = Object.keys(data[0]);
-      const rows = data.map(row => headers.map(h => {
-        const v = row[h];
-        if (v === null || v === undefined) return '';
-        const s = String(v);
-        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
-      }).join(','));
-      return sendText(res, 200, 'text/csv; charset=utf-8', '﻿' + headers.join(',') + '\n' + rows.join('\n'), `${type}.csv`);
+    try {
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, type);
+      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename=${type}.xlsx`,
+        'Content-Length': buf.length,
+        'Access-Control-Allow-Origin': '*',
+      });
+      return res.end(buf);
+    } catch (e) {
+      return sendJSON(res, 500, { error: '导出失败: ' + e.message });
     }
-    return sendJSON(res, 200, data);
   }
 
-  // POST /api/import/:type
+  // POST /api/import/:type（导入 xlsx）
   const importMatch = pathname.match(/^\/api\/import\/(\w[\w-]*)$/);
   if (method === 'POST' && importMatch) {
     const type = importMatch[1];
-    const body = await parseBody(req);
-    const data = body.data;
-    if (!Array.isArray(data) || !data.length) return sendJSON(res, 400, { error: '无效数据' });
     const allowed = ['departments', 'operators', 'products', 'stock-records'];
     if (!allowed.includes(type)) return sendJSON(res, 400, { error: '不支持的类型' });
 
+    // 解析 multipart/form-data 上传的 xlsx 文件
+    const boundary = req.headers['content-type']?.match(/boundary=(.+)/)?.[1];
+    if (!boundary) return sendJSON(res, 400, { error: '请上传 xlsx 文件' });
+
+    const bufs = [];
+    for await (const chunk of req) bufs.push(chunk);
+    const raw = Buffer.concat(bufs);
+
+    // 从 multipart 中提取文件内容
+    const parts = splitMultiPart(raw, boundary);
+    const filePart = parts.find(p => p.filename);
+    if (!filePart) return sendJSON(res, 400, { error: '未找到文件' });
+
     try {
+      const wb = XLSX.read(filePart.data, { type: 'buffer' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+      if (!rows.length) return sendJSON(res, 400, { error: '文件为空' });
+
       let count = 0;
-      for (const row of data) {
+      for (const row of rows) {
         if (type === 'departments' && row.name) {
           store.departments.push({ id: genId(), name: row.name, description: row.description || '', created_at: now(), updated_at: now() });
           count++;
@@ -310,26 +352,15 @@ async function handleAPI(req, res, method, pathname) {
           store.operators.push({ id: genId(), name: row.name, department_id: row.department_id ?? null, created_at: now(), updated_at: now() });
           count++;
         } else if (type === 'products' && row.name) {
-          const product = {
-            id: genId(), name: row.name, category: row.category || '', spec: row.spec || '',
-            unit: row.unit || '件', cost_price: row.cost_price || 0, sale_price: row.sale_price || 0,
-            department_id: row.department_id ?? null, created_at: now(), updated_at: now(),
-          };
+          const product = { id: genId(), name: row.name, category: row.category || '', spec: row.spec || '', unit: row.unit || '件', cost_price: row.cost_price || 0, sale_price: row.sale_price || 0, department_id: row.department_id ?? null, created_at: now(), updated_at: now() };
           store.products.push(product);
           store.inventory.push({ id: genId(), product_id: product.id, quantity: 0, min_quantity: 10, updated_at: now() });
           count++;
         } else if (type === 'stock-records' && row.product_id && row.type && row.quantity) {
-          const record = {
-            id: genId(), product_id: row.product_id, type: row.type, quantity: row.quantity,
-            operator_id: row.operator_id ?? null, department_id: row.department_id ?? null,
-            remark: row.remark || '', created_at: now(),
-          };
+          const record = { id: genId(), product_id: row.product_id, type: row.type, quantity: row.quantity, operator_id: row.operator_id ?? null, department_id: row.department_id ?? null, remark: row.remark || '', created_at: now() };
           store.stockRecords.push(record);
           const idx = store.inventory.findIndex(iv => iv.product_id === row.product_id);
-          if (idx !== -1) {
-            store.inventory[idx].quantity += row.type === 'in' ? row.quantity : -row.quantity;
-            store.inventory[idx].updated_at = now();
-          }
+          if (idx !== -1) { store.inventory[idx].quantity += row.type === 'in' ? row.quantity : -row.quantity; store.inventory[idx].updated_at = now(); }
           count++;
         }
       }
@@ -338,6 +369,45 @@ async function handleAPI(req, res, method, pathname) {
     } catch (e) {
       return sendJSON(res, 500, { error: '导入失败: ' + e.message });
     }
+  }
+
+  // ====== 用户管理 API（仅 admin 可操作）=====
+
+  // GET /api/users
+  if (method === 'GET' && pathname === '/api/users') {
+    const session = requireAuth(req);
+    if (!session || session.username !== 'admin') return sendJSON(res, 403, { error: '仅管理员可管理账号' });
+    return sendJSON(res, 200, store.users.map(u => ({ id: u.id, username: u.username, role: u.role, created_at: u.created_at })));
+  }
+
+  // DELETE /api/users/:id
+  const userDelMatch = pathname.match(/^\/api\/users\/(\d+)$/);
+  if (method === 'DELETE' && userDelMatch) {
+    const session = requireAuth(req);
+    if (!session || session.username !== 'admin') return sendJSON(res, 403, { error: '仅管理员可管理账号' });
+    const userId = parseInt(userDelMatch[1]);
+    if (userId === 1) return sendJSON(res, 400, { error: '不能删除管理员账号' });
+    const idx = store.users.findIndex(u => u.id === userId);
+    if (idx === -1) return sendJSON(res, 404, { error: '用户不存在' });
+    store.users.splice(idx, 1);
+    persist();
+    return sendJSON(res, 200, { success: true });
+  }
+
+  // PUT /api/users/:id/reset-password
+  if (method === 'PUT' && pathname.match(/^\/api\/users\/\d+\/reset-password$/)) {
+    const session = requireAuth(req);
+    if (!session || session.username !== 'admin') return sendJSON(res, 403, { error: '仅管理员可管理账号' });
+    const userId = parseInt(pathname.split('/')[3]);
+    const body = await parseBody(req);
+    if (!body.password || body.password.length < 4) return sendJSON(res, 400, { error: '密码至少4个字符' });
+    const user = store.users.find(u => u.id === userId);
+    if (!user) return sendJSON(res, 404, { error: '用户不存在' });
+    const salt = crypto.randomBytes(16).toString('hex');
+    user.salt = salt;
+    user.password = hashPassword(body.password, salt);
+    persist();
+    return sendJSON(res, 200, { success: true });
   }
 
   // GET /api/table-configs

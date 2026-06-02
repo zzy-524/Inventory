@@ -8,9 +8,9 @@ import InventoryManagement from './pages/InventoryManagement';
 import ProductManagement from './pages/ProductManagement';
 import DepartmentManagement from './pages/DepartmentManagement';
 import OperatorManagement from './pages/OperatorManagement';
-import Reports from './pages/Reports';
+import AccountManagement from './pages/AccountManagement';
 
-type PageKey = 'inventory' | 'products' | 'departments' | 'operators' | 'reports';
+type PageKey = 'inventory' | 'products' | 'departments' | 'operators' | 'reports' | 'accounts';
 
 const pageComponents: Record<PageKey, React.ComponentType> = {
   inventory: InventoryManagement,
@@ -18,6 +18,7 @@ const pageComponents: Record<PageKey, React.ComponentType> = {
   departments: DepartmentManagement,
   operators: OperatorManagement,
   reports: Reports,
+  accounts: AccountManagement,
 };
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__ !== undefined;
