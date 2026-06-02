@@ -1,16 +1,8 @@
 import axios from 'axios';
 import type {
-  Department,
-  Operator,
-  Product,
-  Inventory,
-  StockRecord,
-  AddDepartmentRequest,
-  AddOperatorRequest,
-  AddProductRequest,
-  AddStockRecordRequest,
-  TableConfig,
-  SystemInfo,
+  Department, Operator, Product, Inventory, StockRecord,
+  AddDepartmentRequest, AddOperatorRequest, AddProductRequest,
+  AddStockRecordRequest, TableConfig, SystemInfo,
 } from '../types';
 
 /** 是否在 Tauri 桌面客户端内运行 */
@@ -18,10 +10,23 @@ const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__ !== 
 
 const api = axios.create({
   baseURL: isTauri ? 'http://localhost:8888' : '',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
 });
+
+// 请求拦截器：自动添加 token
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('auth_token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export const authApi = {
+  login: (username: string, password: string) =>
+    api.post<{ token: string; username: string }>('/api/auth/login', { username, password }),
+  register: (username: string, password: string) =>
+    api.post('/api/auth/register', { username, password }),
+  verify: () => api.get<{ valid: boolean; username: string }>('/api/auth/verify'),
+};
 
 export const departmentApi = {
   getAll: () => api.get<Department[]>('/api/departments'),

@@ -6,6 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 
 // ====== 数据存储 ======
 // 判断是否在应用包内运行
@@ -48,6 +49,48 @@ function persist() {
   saveData(store);
 }
 
+// ====== 认证 ======
+function hashPassword(password, salt) {
+  return crypto.createHash('sha256').update(password + salt).digest('hex');
+}
+
+// 初始化默认管理员
+if (!store.users || store.users.length === 0) {
+  store.users = [];
+  const salt = crypto.randomBytes(16).toString('hex');
+  store.users.push({
+    id: 1, username: 'admin', password: hashPassword('admin', salt),
+    salt, role: 'admin', created_at: now(),
+  });
+  persist();
+  console.log('已创建默认管理员账号: admin / admin');
+}
+
+// 会话管理（内存）
+const sessions = new Map(); // token -> { username, createdAt }
+
+function createSession(username) {
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, { username, createdAt: now() });
+  return token;
+}
+
+function verifySession(token) {
+  return sessions.get(token) || null;
+}
+
+function getTokenFromReq(req) {
+  const auth = req.headers['authorization'] || '';
+  const match = auth.match(/^Bearer\s+(.+)$/);
+  return match ? match[1] : null;
+}
+
+function requireAuth(req) {
+  const token = getTokenFromReq(req);
+  if (!token) return null;
+  return verifySession(token);
+}
+
 // ====== HTTP 工具 ======
 function sendJSON(res, status, data) {
   const body = JSON.stringify(data);
@@ -55,7 +98,7 @@ function sendJSON(res, status, data) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   });
   res.end(body);
 }
@@ -117,7 +160,7 @@ async function handleRequest(req, res) {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     });
     return res.end();
   }
@@ -340,6 +383,44 @@ async function handleAPI(req, res, method, pathname) {
     return sendJSON(res, 200, {
       hostname: os.hostname(), platform: os.platform(), isHost: isHostRequest(req), networkInterfaces: addresses,
     });
+  }
+
+  // ====== 认证 API ======
+
+  // POST /api/auth/login
+  if (method === 'POST' && pathname === '/api/auth/login') {
+    const body = await parseBody(req);
+    const user = store.users.find(u => u.username === body.username);
+    if (!user) return sendJSON(res, 401, { error: '用户名或密码错误' });
+    const pwHash = hashPassword(body.password || '', user.salt);
+    if (pwHash !== user.password) return sendJSON(res, 401, { error: '用户名或密码错误' });
+    const token = createSession(user.username);
+    return sendJSON(res, 200, { token, username: user.username });
+  }
+
+  // POST /api/auth/register（仅主机可注册）
+  if (method === 'POST' && pathname === '/api/auth/register') {
+    if (!isHostRequest(req)) return sendJSON(res, 403, { error: '仅主机可注册' });
+    const body = await parseBody(req);
+    if (!body.username || !body.password) return sendJSON(res, 400, { error: '用户名和密码不能为空' });
+    if (body.username.length < 2) return sendJSON(res, 400, { error: '用户名至少2个字符' });
+    if (body.password.length < 4) return sendJSON(res, 400, { error: '密码至少4个字符' });
+    if (store.users.find(u => u.username === body.username)) return sendJSON(res, 409, { error: '用户名已存在' });
+    const salt = crypto.randomBytes(16).toString('hex');
+    const user = {
+      id: genId(), username: body.username, password: hashPassword(body.password, salt),
+      salt, role: 'user', created_at: now(),
+    };
+    store.users.push(user);
+    persist();
+    return sendJSON(res, 200, { success: true });
+  }
+
+  // GET /api/auth/verify
+  if (method === 'GET' && pathname === '/api/auth/verify') {
+    const session = requireAuth(req);
+    if (!session) return sendJSON(res, 401, { error: '未登录' });
+    return sendJSON(res, 200, { valid: true, username: session.username });
   }
 
   // 404
