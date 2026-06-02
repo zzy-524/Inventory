@@ -76,19 +76,16 @@ pub fn run() {
         .manage(ServerProcess(Mutex::new(child)))
         .setup(|app| {
             // 等待服务器就绪后，导航到 Express 服务的前端页面
-            let window = app.get_webview_window("main").unwrap();
-            let window_clone = window.clone();
-            std::thread::spawn(move || {
-                // 轮询等待服务器启动
-                for _ in 0..30 {
-                    if std::net::TcpStream::connect("127.0.0.1:8888").is_ok() {
-                        break;
+            if let Some(window) = app.get_webview_window("main") {
+                let window_clone = window.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..30 {
+                        if std::net::TcpStream::connect("127.0.0.1:8888").is_ok() { break; }
+                        std::thread::sleep(Duration::from_secs(1));
                     }
-                    std::thread::sleep(Duration::from_secs(1));
-                }
-                // 导航到 Express 服务器（绕过 Tauri 内部协议）
-                let _ = window_clone.navigate("http://localhost:8888".parse().unwrap());
-            });
+                    let _ = window_clone.navigate("http://localhost:8888".parse::<url::Url>().unwrap());
+                });
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
