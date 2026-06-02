@@ -6,7 +6,10 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const XLSX = require('xlsx');
+
+// xlsx 非必需 - 不可用时导入导出降级为 JSON
+let XLSX;
+try { XLSX = require('xlsx'); } catch { XLSX = null; }
 
 // ====== 数据存储 ======
 // 判断是否在应用包内运行
@@ -285,6 +288,7 @@ async function handleAPI(req, res, method, pathname) {
   // POST /api/export/:type（导出 xlsx）
   const exportMatch = pathname.match(/^\/api\/export\/(\w[\w-]*)$/);
   if (method === 'POST' && exportMatch) {
+    if (!XLSX) return sendJSON(res, 500, { error: '导出功能不可用（xlsx 模块未安装）' });
     const type = exportMatch[1];
     let data = [];
     switch (type) {
@@ -320,6 +324,7 @@ async function handleAPI(req, res, method, pathname) {
   // POST /api/import/:type（导入 xlsx）
   const importMatch = pathname.match(/^\/api\/import\/(\w[\w-]*)$/);
   if (method === 'POST' && importMatch) {
+    if (!XLSX) return sendJSON(res, 500, { error: '导入功能不可用（xlsx 模块未安装）' });
     const type = importMatch[1];
     const allowed = ['departments', 'operators', 'products', 'stock-records'];
     if (!allowed.includes(type)) return sendJSON(res, 400, { error: '不支持的类型' });
