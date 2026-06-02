@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && sed -i '' 's/ crossorigin//g' dist/index.html",
     "server": "node server.cjs",
     "start": "node server.cjs",
     "desktop": "open src-tauri/target/release/bundle/macos/InventoryApp.app",
