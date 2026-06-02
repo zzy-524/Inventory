@@ -1,0 +1,41 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* antd 布局全屏 */
+.ant-layout {
+  height: 100% !important;
+}
+
+.ant-layout-sider {
+  flex: 0 0 200px !important;
+  max-width: 200px !important;
+  min-width: 200px !important;
+}
+
+.ant-table-wrapper {
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.search-bar {
+  margin-bottom: 16px;
+}
+
+.modal-form {
+  max-height: 400px;
+  overflow-y: auto;
+}

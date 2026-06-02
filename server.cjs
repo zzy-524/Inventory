@@ -1,0 +1,389 @@
+/**
+ * 库存管理系统 - 后端服务器
+ * 纯 Node.js 内置模块，0 外部依赖
+ */
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// ====== 数据存储 ======
+// 判断是否在应用包内运行
+const inAppBundle = __dirname.includes('.app/Contents/Resources');
+const DATA_DIR = inAppBundle
+  ? path.join(os.homedir(), '.inventory-app')
+  : __dirname;
+const DATA_FILE = path.join(DATA_DIR, 'data.json');
+
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
+function loadData() {
+  ensureDataDir();
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    }
+  } catch { /* ignore */ }
+  return { departments: [], operators: [], products: [], inventory: [], stockRecords: [], tableConfigs: [], nextId: 1 };
+}
+
+function saveData(data) {
+  ensureDataDir();
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+let store = loadData();
+let nextId = store.nextId || 1;
+
+function genId() { return nextId++; }
+function now() { return new Date().toISOString().replace('T', ' ').substring(0, 19); }
+
+// 持久化
+function persist() {
+  store.nextId = nextId;
+  saveData(store);
+}
+
+// ====== HTTP 工具 ======
+function sendJSON(res, status, data) {
+  const body = JSON.stringify(data);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  });
+  res.end(body);
+}
+
+function sendText(res, status, contentType, text, filename) {
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Content-Disposition': filename ? `attachment; filename=${filename}` : '',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(text);
+}
+
+function parseBody(req) {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try { resolve(JSON.parse(body)); }
+      catch { resolve({}); }
+    });
+  });
+}
+
+function getIP(req) {
+  return req.socket?.remoteAddress || '';
+}
+
+function isHostRequest(req) {
+  const ip = getIP(req);
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+// ====== MIME 类型 ======
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json',
+};
+
+// ====== 路由处理 ======
+async function handleRequest(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = url.pathname;
+  const method = req.method;
+
+  // CORS preflight
+  if (method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
+    return res.end();
+  }
+
+  // ====== API 路由 ======
+  if (pathname.startsWith('/api/')) {
+    await handleAPI(req, res, method, pathname);
+    return;
+  }
+
+  // ====== 静态文件服务 ======
+  serveStatic(req, res, pathname);
+}
+
+// ====== API 处理 ======
+async function handleAPI(req, res, method, pathname) {
+  // GET /api/departments
+  if (method === 'GET' && pathname === '/api/departments') {
+    return sendJSON(res, 200, store.departments);
+  }
+
+  // POST /api/departments
+  if (method === 'POST' && pathname === '/api/departments') {
+    const body = await parseBody(req);
+    const dept = { id: genId(), name: body.name || '', description: body.description || '', created_at: now(), updated_at: now() };
+    store.departments.push(dept);
+    persist();
+    return sendJSON(res, 200, { id: dept.id });
+  }
+
+  // GET /api/operators
+  if (method === 'GET' && pathname === '/api/operators') {
+    return sendJSON(res, 200, store.operators);
+  }
+
+  // POST /api/operators
+  if (method === 'POST' && pathname === '/api/operators') {
+    const body = await parseBody(req);
+    const op = { id: genId(), name: body.name || '', department_id: body.department_id ?? null, created_at: now(), updated_at: now() };
+    store.operators.push(op);
+    persist();
+    return sendJSON(res, 200, { id: op.id });
+  }
+
+  // GET /api/products
+  if (method === 'GET' && pathname === '/api/products') {
+    return sendJSON(res, 200, store.products);
+  }
+
+  // POST /api/products
+  if (method === 'POST' && pathname === '/api/products') {
+    const body = await parseBody(req);
+    const product = {
+      id: genId(), name: body.name || '', category: body.category || '', spec: body.spec || '',
+      unit: body.unit || '件', cost_price: body.cost_price || 0, sale_price: body.sale_price || 0,
+      department_id: body.department_id ?? null, created_at: now(), updated_at: now(),
+    };
+    store.products.push(product);
+    store.inventory.push({ id: genId(), product_id: product.id, quantity: 0, min_quantity: 10, updated_at: now() });
+    persist();
+    return sendJSON(res, 200, { id: product.id });
+  }
+
+  // GET /api/inventory
+  if (method === 'GET' && pathname === '/api/inventory') {
+    return sendJSON(res, 200, store.inventory);
+  }
+
+  // GET /api/stock-records
+  if (method === 'GET' && pathname === '/api/stock-records') {
+    const records = [...store.stockRecords].sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return sendJSON(res, 200, records);
+  }
+
+  // POST /api/stock-records
+  if (method === 'POST' && pathname === '/api/stock-records') {
+    const body = await parseBody(req);
+    const record = {
+      id: genId(), product_id: body.product_id, type: body.type, quantity: body.quantity,
+      operator_id: body.operator_id ?? null, department_id: body.department_id ?? null,
+      remark: body.remark || '', created_at: now(),
+    };
+    store.stockRecords.push(record);
+
+    // 更新库存
+    const idx = store.inventory.findIndex(iv => iv.product_id === body.product_id);
+    if (idx !== -1) {
+      const qty = body.type === 'in' ? body.quantity : -body.quantity;
+      store.inventory[idx].quantity += qty;
+      store.inventory[idx].updated_at = now();
+    }
+    persist();
+    return sendJSON(res, 200, { id: record.id });
+  }
+
+  // POST /api/export/:type
+  const exportMatch = pathname.match(/^\/api\/export\/(\w[\w-]*)$/);
+  if (method === 'POST' && exportMatch) {
+    const type = exportMatch[1];
+    const body = await parseBody(req);
+    const format = body.format || 'json';
+    let data = [];
+    switch (type) {
+      case 'departments': data = store.departments; break;
+      case 'operators': data = store.operators; break;
+      case 'products': data = store.products; break;
+      case 'inventory':
+        data = store.inventory.map(iv => {
+          const p = store.products.find(pr => pr.id === iv.product_id);
+          return { ...iv, product_name: p?.name || '', product_spec: p?.spec || '', product_unit: p?.unit || '' };
+        });
+        break;
+      case 'stock-records': data = [...store.stockRecords].sort((a, b) => b.created_at.localeCompare(a.created_at)); break;
+      default: return sendJSON(res, 400, { error: '无效的数据类型' });
+    }
+    if (format === 'csv') {
+      if (!data.length) return sendText(res, 200, 'text/csv; charset=utf-8', '', `${type}.csv`);
+      const headers = Object.keys(data[0]);
+      const rows = data.map(row => headers.map(h => {
+        const v = row[h];
+        if (v === null || v === undefined) return '';
+        const s = String(v);
+        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+      }).join(','));
+      return sendText(res, 200, 'text/csv; charset=utf-8', '﻿' + headers.join(',') + '\n' + rows.join('\n'), `${type}.csv`);
+    }
+    return sendJSON(res, 200, data);
+  }
+
+  // POST /api/import/:type
+  const importMatch = pathname.match(/^\/api\/import\/(\w[\w-]*)$/);
+  if (method === 'POST' && importMatch) {
+    const type = importMatch[1];
+    const body = await parseBody(req);
+    const data = body.data;
+    if (!Array.isArray(data) || !data.length) return sendJSON(res, 400, { error: '无效数据' });
+    const allowed = ['departments', 'operators', 'products', 'stock-records'];
+    if (!allowed.includes(type)) return sendJSON(res, 400, { error: '不支持的类型' });
+
+    try {
+      let count = 0;
+      for (const row of data) {
+        if (type === 'departments' && row.name) {
+          store.departments.push({ id: genId(), name: row.name, description: row.description || '', created_at: now(), updated_at: now() });
+          count++;
+        } else if (type === 'operators' && row.name) {
+          store.operators.push({ id: genId(), name: row.name, department_id: row.department_id ?? null, created_at: now(), updated_at: now() });
+          count++;
+        } else if (type === 'products' && row.name) {
+          const product = {
+            id: genId(), name: row.name, category: row.category || '', spec: row.spec || '',
+            unit: row.unit || '件', cost_price: row.cost_price || 0, sale_price: row.sale_price || 0,
+            department_id: row.department_id ?? null, created_at: now(), updated_at: now(),
+          };
+          store.products.push(product);
+          store.inventory.push({ id: genId(), product_id: product.id, quantity: 0, min_quantity: 10, updated_at: now() });
+          count++;
+        } else if (type === 'stock-records' && row.product_id && row.type && row.quantity) {
+          const record = {
+            id: genId(), product_id: row.product_id, type: row.type, quantity: row.quantity,
+            operator_id: row.operator_id ?? null, department_id: row.department_id ?? null,
+            remark: row.remark || '', created_at: now(),
+          };
+          store.stockRecords.push(record);
+          const idx = store.inventory.findIndex(iv => iv.product_id === row.product_id);
+          if (idx !== -1) {
+            store.inventory[idx].quantity += row.type === 'in' ? row.quantity : -row.quantity;
+            store.inventory[idx].updated_at = now();
+          }
+          count++;
+        }
+      }
+      persist();
+      return sendJSON(res, 200, { success: true, count });
+    } catch (e) {
+      return sendJSON(res, 500, { error: '导入失败: ' + e.message });
+    }
+  }
+
+  // GET /api/table-configs
+  if (method === 'GET' && pathname === '/api/table-configs') {
+    return sendJSON(res, 200, store.tableConfigs.map(c => ({ ...c, columns: typeof c.columns === 'string' ? JSON.parse(c.columns) : c.columns })));
+  }
+
+  // GET /api/table-configs/:page
+  const tcGetMatch = pathname.match(/^\/api\/table-configs\/(.+)$/);
+  if (method === 'GET' && tcGetMatch) {
+    const config = store.tableConfigs.find(c => c.page_key === tcGetMatch[1]);
+    if (config) {
+      config.columns = typeof config.columns === 'string' ? JSON.parse(config.columns) : config.columns;
+      return sendJSON(res, 200, config);
+    }
+    return sendJSON(res, 200, null);
+  }
+
+  // PUT /api/table-configs/:page
+  if (method === 'PUT' && tcGetMatch) {
+    const pageKey = tcGetMatch[1];
+    const body = await parseBody(req);
+    if (!Array.isArray(body.columns)) return sendJSON(res, 400, { error: '无效的列配置' });
+    const idx = store.tableConfigs.findIndex(c => c.page_key === pageKey);
+    const entry = { page_key: pageKey, columns: body.columns, updated_at: now() };
+    if (idx !== -1) store.tableConfigs[idx] = entry;
+    else store.tableConfigs.push({ id: genId(), ...entry });
+    persist();
+    return sendJSON(res, 200, { success: true });
+  }
+
+  // GET /api/system/info
+  if (method === 'GET' && pathname === '/api/system/info') {
+    const interfaces = os.networkInterfaces();
+    const addresses = [];
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          addresses.push({ name, address: iface.address });
+        }
+      }
+    }
+    return sendJSON(res, 200, {
+      hostname: os.hostname(), platform: os.platform(), isHost: isHostRequest(req), networkInterfaces: addresses,
+    });
+  }
+
+  // 404
+  sendJSON(res, 404, { error: 'Not found' });
+}
+
+// ====== 静态文件服务 ======
+function serveStatic(req, res, pathname) {
+  let filePath = path.join(__dirname, 'dist', pathname === '/' ? 'index.html' : pathname);
+
+  // SPA fallback: 非 API 请求返回 index.html
+  if (!fs.existsSync(filePath)) {
+    filePath = path.join(__dirname, 'dist', 'index.html');
+  }
+
+  const ext = path.extname(filePath);
+  const contentType = MIME[ext] || 'application/octet-stream';
+
+  try {
+    const content = fs.readFileSync(filePath);
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': content.length,
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(content);
+  } catch {
+    res.writeHead(404);
+    res.end('Not Found');
+  }
+}
+
+// ====== 启动服务器 ======
+const PORT = 8888;
+const server = http.createServer(handleRequest);
+
+server.listen(PORT, '0.0.0.0', () => {
+  const interfaces = os.networkInterfaces();
+  let localIP = 'localhost';
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) localIP = iface.address;
+    }
+  }
+  console.log(`HTTP server listening on http://0.0.0.0:${PORT}`);
+  console.log(`局域网访问: http://${localIP}:${PORT}`);
+});
