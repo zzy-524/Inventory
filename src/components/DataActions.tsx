@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Button, Modal, Upload, message, Checkbox, Space, Tooltip } from 'antd';
-import {
-  DownloadOutlined, UploadOutlined, SettingOutlined, FileExcelOutlined,
-} from '@ant-design/icons';
+import { DownloadOutlined, UploadOutlined, SettingOutlined, FileExcelOutlined } from '@ant-design/icons';
 import { exportApi, tableConfigApi, systemApi } from '../api';
 import type { UploadProps } from 'antd';
 
@@ -17,6 +15,26 @@ interface DataActionsProps {
   columns: ColumnDef[];
   onColumnsChange: (columns: ColumnDef[]) => void;
   onDataImported: () => void;
+}
+
+/** 解析 CSV 文本为 JSON 数组 */
+function parseCSV(text: string): Record<string, unknown>[] {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length < 2) throw new Error('CSV 文件至少需要标题行和一行数据');
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const values: string[] = [];
+    let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; continue; }
+      if (ch === ',' && !inQ) { values.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    values.push(cur);
+    const row: Record<string, unknown> = {};
+    headers.forEach((h, i) => { row[h] = values[i] || ''; });
+    return row;
+  });
 }
 
 export default function DataActions({ pageKey, columns, onColumnsChange, onDataImported }: DataActionsProps) {
@@ -35,36 +53,38 @@ export default function DataActions({ pageKey, columns, onColumnsChange, onDataI
 
   const handleExport = async () => {
     try {
-      const response = await exportApi.exportData(pageKey, 'xlsx');
-      const blob = new Blob([response.data], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
+      const response = await exportApi.exportData(pageKey);
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${pageKey}.xlsx`;
+      a.download = `${pageKey}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      message.success('导出成功 (XLSX)');
+      message.success('导出成功 (CSV)');
     } catch { message.error('导出失败'); }
   };
 
   const importProps: UploadProps = {
-    accept: '.xlsx,.xls',
+    accept: '.csv',
     showUploadList: false,
     beforeUpload: (file) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      fetch(`/api/import/${pageKey}`, { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(data => {
-          if (data.error) return message.error(data.error);
-          message.success(`成功导入 ${data.count} 条记录`);
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const text = e.target?.result as string;
+          const data = parseCSV(text);
+          const res = await exportApi.importData(pageKey, data);
+          message.success(`成功导入 ${res.data.count} 条记录`);
           onDataImported();
-        })
-        .catch(() => message.error('导入失败'));
+        } catch (err: unknown) {
+          const msg = (err as { message?: string }).message || '文件格式错误';
+          message.error('导入失败: ' + msg);
+        }
+      };
+      reader.readAsText(file);
       return false;
     },
   };
@@ -87,11 +107,11 @@ export default function DataActions({ pageKey, columns, onColumnsChange, onDataI
   return (
     <Space>
       <Button icon={<DownloadOutlined />} onClick={handleExport}>
-        <FileExcelOutlined style={{ marginRight: 4 }} />导出 XLSX
+        <FileExcelOutlined style={{ marginRight: 4 }} />导出 CSV
       </Button>
 
       <Upload {...importProps}>
-        <Button icon={<UploadOutlined />}>导入 XLSX</Button>
+        <Button icon={<UploadOutlined />}>导入 CSV</Button>
       </Upload>
 
       <Tooltip title={!isHost ? '仅主机可自定义表头' : '自定义表头'}>

@@ -7,10 +7,6 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-// xlsx 非必需 - 不可用时导入导出降级为 JSON
-let XLSX;
-try { XLSX = require('xlsx'); } catch { XLSX = null; }
-
 // ====== 数据存储 ======
 // 判断是否在应用包内运行
 const inAppBundle = __dirname.includes('.app/Contents/Resources');
@@ -152,32 +148,6 @@ const MIME = {
   '.map': 'application/json',
 };
 
-// ====== multipart/form-data 解析 ======
-function splitMultiPart(buf, boundary) {
-  const parts = [];
-  const delim = Buffer.from('--' + boundary);
-  const endDelim = Buffer.from('--' + boundary + '--');
-  let start = 0;
-  while (start < buf.length) {
-    const idx = buf.indexOf(delim, start);
-    if (idx === -1) break;
-    const partStart = buf.indexOf(Buffer.from('\r\n\r\n'), idx);
-    if (partStart === -1) break;
-    const headerEnd = partStart + 4;
-    const nextDelim = buf.indexOf(delim, headerEnd);
-    const partEnd = nextDelim !== -1 ? nextDelim - 2 : buf.indexOf(endDelim, headerEnd);
-    if (partEnd === -1 || partEnd <= headerEnd) break;
-    const headerBuf = buf.slice(idx + delim.length, partStart);
-    const data = buf.slice(headerEnd, partEnd);
-    const headers = headerBuf.toString().split('\r\n');
-    const cd = headers.find(h => h.startsWith('Content-Disposition')) || '';
-    const filenameMatch = cd.match(/filename="?([^"]*)"?/);
-    parts.push({ data, filename: filenameMatch ? filenameMatch[1] : null, headers });
-    start = partEnd + delim.length;
-  }
-  return parts;
-}
-
 // ====== 路由处理 ======
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -285,10 +255,9 @@ async function handleAPI(req, res, method, pathname) {
     return sendJSON(res, 200, { id: record.id });
   }
 
-  // POST /api/export/:type（导出 xlsx）
+  // POST /api/export/:type（导出 CSV）
   const exportMatch = pathname.match(/^\/api\/export\/(\w[\w-]*)$/);
   if (method === 'POST' && exportMatch) {
-    if (!XLSX) return sendJSON(res, 500, { error: '导出功能不可用（xlsx 模块未安装）' });
     const type = exportMatch[1];
     let data = [];
     switch (type) {
@@ -304,50 +273,28 @@ async function handleAPI(req, res, method, pathname) {
       case 'stock-records': data = [...store.stockRecords].sort((a, b) => b.created_at.localeCompare(a.created_at)); break;
       default: return sendJSON(res, 400, { error: '无效的数据类型' });
     }
-    try {
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, type);
-      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-      res.writeHead(200, {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename=${type}.xlsx`,
-        'Content-Length': buf.length,
-        'Access-Control-Allow-Origin': '*',
-      });
-      return res.end(buf);
-    } catch (e) {
-      return sendJSON(res, 500, { error: '导出失败: ' + e.message });
-    }
+    if (!data.length) return sendText(res, 200, 'text/csv; charset=utf-8', '', `${type}.csv`);
+    const headers = Object.keys(data[0]);
+    const rows = data.map(row => headers.map(h => {
+      const v = row[h];
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(','));
+    return sendText(res, 200, 'text/csv; charset=utf-8', '﻿' + headers.join(',') + '\n' + rows.join('\n'), `${type}.csv`);
   }
 
-  // POST /api/import/:type（导入 xlsx）
+  // POST /api/import/:type（导入 CSV，前端已解析为 JSON 发送）
   const importMatch = pathname.match(/^\/api\/import\/(\w[\w-]*)$/);
   if (method === 'POST' && importMatch) {
-    if (!XLSX) return sendJSON(res, 500, { error: '导入功能不可用（xlsx 模块未安装）' });
     const type = importMatch[1];
+    const body = await parseBody(req);
+    const rows = body.data;
+    if (!Array.isArray(rows) || !rows.length) return sendJSON(res, 400, { error: '数据为空' });
     const allowed = ['departments', 'operators', 'products', 'stock-records'];
     if (!allowed.includes(type)) return sendJSON(res, 400, { error: '不支持的类型' });
 
-    // 解析 multipart/form-data 上传的 xlsx 文件
-    const boundary = req.headers['content-type']?.match(/boundary=(.+)/)?.[1];
-    if (!boundary) return sendJSON(res, 400, { error: '请上传 xlsx 文件' });
-
-    const bufs = [];
-    for await (const chunk of req) bufs.push(chunk);
-    const raw = Buffer.concat(bufs);
-
-    // 从 multipart 中提取文件内容
-    const parts = splitMultiPart(raw, boundary);
-    const filePart = parts.find(p => p.filename);
-    if (!filePart) return sendJSON(res, 400, { error: '未找到文件' });
-
     try {
-      const wb = XLSX.read(filePart.data, { type: 'buffer' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws);
-      if (!rows.length) return sendJSON(res, 400, { error: '文件为空' });
-
       let count = 0;
       for (const row of rows) {
         if (type === 'departments' && row.name) {

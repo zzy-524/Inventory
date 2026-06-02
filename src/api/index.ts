@@ -55,6 +55,8 @@ export const stockRecordApi = {
 export const exportApi = {
   exportData: (type: string) =>
     api.post(`/api/export/${type}`, {}, { responseType: 'blob' }),
+  importData: (type: string, data: Record<string, unknown>[]) =>
+    api.post(`/api/import/${type}`, { data }),
 };
 
 export const userApi = {
