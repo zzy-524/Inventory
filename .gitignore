@@ -7,6 +7,8 @@ data.json
 .env
 .DS_Store
 src-tauri/target/
+src-tauri/.cargo/
 src-tauri/gen/
 node.exe
 *.log
+graphify-out
