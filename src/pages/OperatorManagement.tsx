@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, Select, message, Space } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { Operator, Department } from '../types';
 import { operatorApi, departmentApi } from '../api';
+import usePageSize from '../hooks/usePageSize';
 
 export default function OperatorManagement() {
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -11,6 +12,7 @@ export default function OperatorManagement() {
   const [form] = Form.useForm();
   const [searchText, setSearchText] = useState('');
   const [editingOp, setEditingOp] = useState<Operator | null>(null);
+  const { pagination } = usePageSize('operators');
 
   useEffect(() => {
     loadOperators();
@@ -110,7 +112,7 @@ export default function OperatorManagement() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => showModal()}>添加操作人</Button>
         </Space>
       </div>
-      <Table dataSource={filteredOperators} columns={allColumns} rowKey="id" pagination={{ pageSize: 10 }} />
+      <Table dataSource={filteredOperators} columns={allColumns} rowKey="id" pagination={pagination} />
 
       <Modal title={editingOp ? '编辑操作人' : '添加操作人'} open={isModalVisible}
         onOk={handleOk} onCancel={() => setIsModalVisible(false)}>

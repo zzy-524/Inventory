@@ -74,14 +74,14 @@ fn cmd_get_departments(
     Ok(state.get_departments())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn cmd_add_department(
     state: State<'_, SharedStore>,
     name: String,
     description: String,
-    sort_order: Option<u64>,
+    sort_order: Option<i64>,
 ) -> Result<serde_json::Value, String> {
-    let id = state.add_department(&name, &description, sort_order.unwrap_or(0));
+    let id = state.add_department(&name, &description, sort_order.unwrap_or(1));
     Ok(serde_json::json!({ "id": id }))
 }
 
@@ -141,15 +141,15 @@ fn cmd_delete_product(
     Ok(serde_json::json!({ "success": true }))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn cmd_update_department(
     state: State<'_, SharedStore>,
     id: u64,
     name: String,
     description: String,
-    sort_order: Option<u64>,
+    sort_order: Option<i64>,
 ) -> Result<serde_json::Value, String> {
-    state.update_department(id, &name, &description, sort_order.unwrap_or(0))?;
+    state.update_department(id, &name, &description, sort_order.unwrap_or(1))?;
     Ok(serde_json::json!({ "success": true }))
 }
 
@@ -162,7 +162,7 @@ fn cmd_delete_department(
     Ok(serde_json::json!({ "success": true }))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 fn cmd_update_operator(
     state: State<'_, SharedStore>,
     id: u64,

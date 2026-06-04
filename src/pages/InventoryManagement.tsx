@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, Select, InputNumber, message, Space,
 import { SearchOutlined, InboxOutlined, LogoutOutlined, DownloadOutlined, UploadOutlined, FileExcelOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { Inventory, Product, Operator, Department, StockRecord } from '../types';
 import { inventoryApi, productApi, operatorApi, departmentApi, stockRecordApi, saveFile } from '../api';
+import usePageSize from '../hooks/usePageSize';
 import * as XLSX from 'xlsx';
 import type { UploadProps } from 'antd';
 
@@ -44,6 +45,8 @@ export default function InventoryManagement() {
   const [searchText, setSearchText] = useState('');
   const [modalType, setModalType] = useState<'in' | 'out'>('in');
   const [importing, setImporting] = useState(false);
+  const { pagination: invPagination } = usePageSize('inventory');
+  const { pagination: recPagination } = usePageSize('stock_records');
 
   useEffect(() => { loadData(); }, []);
 
@@ -291,7 +294,7 @@ export default function InventoryManagement() {
 
       <h3 style={{ margin: '24px 0 12px' }}>库存列表</h3>
       <Table dataSource={filteredInventory} columns={allInventoryColumns} rowKey="id"
-        pagination={{ pageSize: 10 }}
+        pagination={invPagination}
         rowClassName={(record) => {
           const p = getProductInfo(record.product_id);
           return p?.deleted ? 'row-disabled' : '';
@@ -299,7 +302,7 @@ export default function InventoryManagement() {
       />
 
       <h3 style={{ margin: '24px 0 12px' }}>操作记录</h3>
-      <Table dataSource={stockRecords} columns={allRecordColumns} rowKey="id" pagination={{ pageSize: 10 }} />
+      <Table dataSource={stockRecords} columns={allRecordColumns} rowKey="id" pagination={recPagination} />
 
       <Modal title={modalType === 'in' ? '入库操作' : '出库操作'} open={isModalVisible}
         onOk={handleOk} onCancel={() => setIsModalVisible(false)}>

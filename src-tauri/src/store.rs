@@ -10,7 +10,7 @@ pub struct Department {
     pub id: u64,
     pub name: String,
     pub description: String,
-    pub sort_order: u64,
+    pub sort_order: i64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -384,7 +384,7 @@ impl Store {
         depts
     }
 
-    pub fn add_department(&self, name: &str, description: &str, sort_order: u64) -> u64 {
+    pub fn add_department(&self, name: &str, description: &str, sort_order: i64) -> u64 {
         let id = self.gen_id();
         let mut data = self.data.lock().unwrap();
         data.departments.push(Department {
@@ -400,7 +400,7 @@ impl Store {
         id
     }
 
-    pub fn update_department(&self, id: u64, name: &str, description: &str, sort_order: u64) -> Result<(), String> {
+    pub fn update_department(&self, id: u64, name: &str, description: &str, sort_order: i64) -> Result<(), String> {
         let mut data = self.data.lock().unwrap();
         let dept = data.departments.iter_mut().find(|d| d.id == id).ok_or("部门不存在")?;
         dept.name = name.to_string();
@@ -940,7 +940,7 @@ impl Store {
                             id,
                             name: name.to_string(),
                             description: row.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                            sort_order: row.get("sort_order").and_then(|v| v.as_u64()).unwrap_or(0),
+                            sort_order: row.get("sort_order").and_then(|v| v.as_i64()).unwrap_or(1),
                             created_at: now_str(),
                             updated_at: now_str(),
                         });
@@ -1156,7 +1156,7 @@ impl Store {
                     id,
                     name: item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
                     description: item.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                    sort_order: item.get("sort_order").and_then(|v| v.as_u64()).unwrap_or(0),
+                    sort_order: item.get("sort_order").and_then(|v| v.as_i64()).unwrap_or(1),
                     created_at: item.get("created_at").and_then(|v| v.as_str()).unwrap_or("").to_string(),
                     updated_at: item.get("updated_at").and_then(|v| v.as_str()).unwrap_or("").to_string(),
                 }

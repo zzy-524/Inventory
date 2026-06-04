@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, Select, InputNumber, message, Space,
 import { PlusOutlined, DeleteOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, FileExcelOutlined, FileTextOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { Product, Department } from '../types';
 import { productApi, departmentApi, saveFile } from '../api';
+import usePageSize from '../hooks/usePageSize';
 import * as XLSX from 'xlsx';
 import type { UploadProps } from 'antd';
 
@@ -44,6 +45,7 @@ export default function ProductManagement() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [form] = Form.useForm();
   const [searchText, setSearchText] = useState('');
+  const { pagination } = usePageSize('products');
   const [importing, setImporting] = useState(false);
 
   useEffect(() => { loadProducts(); loadDepartments(); }, []);
@@ -290,7 +292,7 @@ export default function ProductManagement() {
           <Button type="primary" icon={<PlusOutlined />} onClick={showAddModal}>添加商品</Button>
         </Space>
       </div>
-      <Table dataSource={filteredProducts} columns={allColumns} rowKey="id" pagination={{ pageSize: 10 }}
+      <Table dataSource={filteredProducts} columns={allColumns} rowKey="id" pagination={pagination}
         rowClassName={(record) => record.deleted ? 'row-disabled' : ''} />
 
       <Modal title="添加商品" open={isModalVisible} onOk={handleAdd} onCancel={() => setIsModalVisible(false)}>

@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, InputNumber, message, Space } from '
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { Department } from '../types';
 import { departmentApi } from '../api';
+import usePageSize from '../hooks/usePageSize';
 
 export default function DepartmentManagement() {
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -10,6 +11,7 @@ export default function DepartmentManagement() {
   const [form] = Form.useForm();
   const [searchText, setSearchText] = useState('');
   const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const { pagination } = usePageSize('departments');
 
   useEffect(() => { loadDepartments(); }, []);
 
@@ -71,7 +73,8 @@ export default function DepartmentManagement() {
   );
 
   const allColumns = [
-    { title: '序号', dataIndex: 'sort_order', key: 'sort_order', width: 60 },
+    { title: '序号', key: 'index', width: 60, render: (_: unknown, __: unknown, index: number) => index + 1 },
+    { title: '排序', dataIndex: 'sort_order', key: 'sort_order', width: 60 },
     { title: '部门名称', dataIndex: 'name', key: 'name' },
     { title: '描述', dataIndex: 'description', key: 'description' },
     { title: '创建时间', dataIndex: 'created_at', key: 'created_at' },
@@ -91,13 +94,13 @@ export default function DepartmentManagement() {
           onChange={(e) => setSearchText(e.target.value)} style={{ width: 300 }} />
         <Button type="primary" icon={<PlusOutlined />} onClick={() => showModal()}>添加部门</Button>
       </div>
-      <Table dataSource={filteredDepts} columns={allColumns} rowKey="id" pagination={{ pageSize: 10 }} />
+      <Table dataSource={filteredDepts} columns={allColumns} rowKey="id" pagination={pagination} />
 
       <Modal title={editingDept ? '编辑部门' : '添加部门'} open={isModalVisible}
         onOk={handleOk} onCancel={() => setIsModalVisible(false)}>
         <Form form={form} layout="vertical" className="modal-form">
-          <Form.Item label="序号" name="sort_order" initialValue={0}>
-            <InputNumber style={{ width: '100%' }} min={0} />
+          <Form.Item label="排序" name="sort_order" initialValue={1}>
+            <InputNumber style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item label="部门名称" name="name" rules={[{ required: true }]}>
             <Input />

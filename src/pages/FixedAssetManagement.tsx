@@ -3,6 +3,7 @@ import { Table, Button, Modal, Form, Input, Select, InputNumber, DatePicker, mes
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, FileExcelOutlined, FileTextOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { FixedAsset, Department } from '../types';
 import { fixedAssetApi, departmentApi, saveFile } from '../api';
+import usePageSize from '../hooks/usePageSize';
 import * as XLSX from 'xlsx';
 import type { UploadProps } from 'antd';
 import dayjs from 'dayjs';
@@ -65,6 +66,7 @@ export default function FixedAssetManagement() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [form] = Form.useForm();
   const [searchName, setSearchName] = useState('');
+  const { pagination } = usePageSize('fixed_assets');
   const [searchDept, setSearchDept] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
@@ -244,7 +246,7 @@ export default function FixedAssetManagement() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => showModal()}>新增资产</Button>
         </Space>
       </div>
-      <Table dataSource={filteredAssets} columns={columns} rowKey="id" pagination={{ pageSize: 10 }} scroll={{ x: 1300 }} />
+      <Table dataSource={filteredAssets} columns={columns} rowKey="id" pagination={pagination} scroll={{ x: 1300 }} />
 
       <Modal title={editingId ? '编辑固定资产' : '新增固定资产'} open={isModalVisible} onOk={handleOk} onCancel={() => setIsModalVisible(false)} width={600}>
         <Form form={form} layout="vertical">

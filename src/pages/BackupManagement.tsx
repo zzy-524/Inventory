@@ -77,14 +77,13 @@ export default function BackupManagement() {
     reader.onload = async (e) => {
       try {
         const wb = XLSX.read(e.target?.result as ArrayBuffer, { type: 'array' });
-        // 精确匹配部门 sheet，失败则尝试模糊匹配，避免回退到格式不同的汇总 sheet
+        // 精确匹配部门 sheet，失败则模糊匹配，再失败则回退到第一个 sheet
         let sheetName = wb.SheetNames.find(n => n === deptName);
         if (!sheetName) {
           sheetName = wb.SheetNames.find(n => n.includes(deptName) || deptName.includes(n));
         }
         if (!sheetName) {
-          message.error(`文件中没有匹配「${deptName}」的 sheet，可用 sheet：${wb.SheetNames.join('、')}`);
-          setInitLoading(false); return;
+          sheetName = wb.SheetNames[0];
         }
         const ws = wb.Sheets[sheetName];
         const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][];

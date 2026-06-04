@@ -60,11 +60,11 @@ export const departmentApi = {
     return api.get<Department[]>('/api/departments');
   },
   add: async (data: AddDepartmentRequest) => {
-    if (isTauri) return tauriRequest<{ id: number }>('cmd_add_department', { name: data.name || '', description: data.description || '', sort_order: data.sort_order ?? 0 });
+    if (isTauri) return tauriRequest<{ id: number }>('cmd_add_department', { name: data.name || '', description: data.description || '', sort_order: data.sort_order ?? 1 });
     return api.post('/api/departments', data);
   },
   update: async (id: number, data: { name: string; description: string; sort_order?: number }) => {
-    if (isTauri) return tauriRequest<{ success: boolean }>('cmd_update_department', { id, name: data.name || '', description: data.description || '', sort_order: data.sort_order ?? 0 });
+    if (isTauri) return tauriRequest<{ success: boolean }>('cmd_update_department', { id, name: data.name || '', description: data.description || '', sort_order: data.sort_order ?? 1 });
     return api.put(`/api/departments/${id}`, data);
   },
   delete: async (id: number) => {

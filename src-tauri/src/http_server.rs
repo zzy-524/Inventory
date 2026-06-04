@@ -170,7 +170,7 @@ fn handle_api(
             let body = read_body(request);
             let name = body["name"].as_str().unwrap_or("");
             let desc = body["description"].as_str().unwrap_or("");
-            let id = store.add_department(name, desc, body["sort_order"].as_u64().unwrap_or(0));
+            let id = store.add_department(name, desc, body["sort_order"].as_i64().unwrap_or(1));
             json_response(serde_json::json!({ "id": id }))
         }
 
@@ -182,7 +182,7 @@ fn handle_api(
                 id,
                 body["name"].as_str().unwrap_or(""),
                 body["description"].as_str().unwrap_or(""),
-                body["sort_order"].as_u64().unwrap_or(0),
+                body["sort_order"].as_i64().unwrap_or(1),
             ) {
                 Ok(()) => json_response(serde_json::json!({ "success": true })),
                 Err(e) => status_json(serde_json::json!({ "error": e }), 400),
