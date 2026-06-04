@@ -5,21 +5,24 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && sed -i '' 's/ crossorigin//g' dist/index.html",
+    "build": "vite build",
     "server": "node server.cjs",
     "start": "node server.cjs",
     "desktop": "open src-tauri/target/release/bundle/macos/InventoryApp.app",
     "deploy": "bash scripts/deploy.sh",
     "tauri": "tauri",
-    "tauri:build": "tauri build",
-    "tauri:dev": "tauri dev"
+    "tauri:dev": "tauri dev",
+    "build:mac": "tauri build --target aarch64-apple-darwin",
+    "build:win": "tauri build --target x86_64-pc-windows-gnu --bundles nsis",
+    "build:all": "npm run build:mac && npm run build:win"
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.5",
     "antd": "^6.4.3",
     "axios": "^1.6.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tauri-apps/api": "^2.0.0",

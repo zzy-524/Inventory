@@ -15,7 +15,7 @@ echo ""
 # 创建目标目录
 mkdir -p "$APP_DIR"
 
-# 复制服务器文件（零外部依赖）
+# 复制服务器文件（零依赖）
 echo "复制服务器文件..."
 cp "$PROJECT_DIR/server.cjs" "$APP_DIR/"
 

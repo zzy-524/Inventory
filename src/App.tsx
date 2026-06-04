@@ -8,17 +8,22 @@ import InventoryManagement from './pages/InventoryManagement';
 import ProductManagement from './pages/ProductManagement';
 import DepartmentManagement from './pages/DepartmentManagement';
 import OperatorManagement from './pages/OperatorManagement';
-import AccountManagement from './pages/AccountManagement';
+import Reports from './pages/Reports';
+import LedgerPage from './pages/LedgerPage';
+import FixedAssetManagement from './pages/FixedAssetManagement';
+import BackupManagement from './pages/BackupManagement';
 
-type PageKey = 'inventory' | 'products' | 'departments' | 'operators' | 'reports' | 'accounts';
+type PageKey = 'reports' | 'ledger' | 'inventory' | 'products' | 'departments' | 'operators' | 'fixedAssets' | 'backup';
 
 const pageComponents: Record<PageKey, React.ComponentType> = {
+  reports: Reports,
+  ledger: LedgerPage,
   inventory: InventoryManagement,
   products: ProductManagement,
   departments: DepartmentManagement,
   operators: OperatorManagement,
-  reports: Reports,
-  accounts: AccountManagement,
+  fixedAssets: FixedAssetManagement,
+  backup: BackupManagement,
 };
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__ !== undefined;
@@ -27,7 +32,15 @@ export default function App() {
   const [authed, setAuthed] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [username, setUsername] = useState('');
-  const [currentPage, setCurrentPage] = useState<PageKey>('inventory');
+  const [currentPage, setCurrentPage] = useState<PageKey>('reports');
+
+  const handlePageChange = (page: string) => {
+    if (page === 'operators' && !isTauri) {
+      message.warning('操作人管理仅在客户端可用');
+      return;
+    }
+    setCurrentPage(page as PageKey);
+  };
   const [startupVisible, setStartupVisible] = useState(isTauri);
   const [serverInfo, setServerInfo] = useState<{ localUrl: string; lanUrls: string[] } | null>(null);
   const [copied, setCopied] = useState<'local' | 'lan' | null>(null);
@@ -42,15 +55,14 @@ export default function App() {
       .finally(() => setAuthLoading(false));
   }, []);
 
-  // Tauri 启动弹窗
+  // Tauri 启动弹窗 — 获取 HTTP 服务器地址
   useEffect(() => {
     if (!isTauri) return;
     let retries = 0;
     const check = () => {
-      systemApi.getInfo()
+      systemApi.getServerUrls()
         .then(res => {
-          const urls = res.data.networkInterfaces.map(i => `http://${i.address}:8888`);
-          setServerInfo({ localUrl: 'http://localhost:8888', lanUrls: urls });
+          setServerInfo({ localUrl: res.data.localUrl, lanUrls: res.data.lanUrls });
         })
         .catch(() => { if (++retries < 15) setTimeout(check, 1000); });
     };
@@ -59,12 +71,14 @@ export default function App() {
 
   const handleLogin = (token: string, name: string) => {
     localStorage.setItem('auth_token', token);
+    localStorage.setItem('username', name);
     setAuthed(true);
     setUsername(name);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('username');
     setAuthed(false);
     setUsername('');
   };
@@ -157,7 +171,7 @@ export default function App() {
         </Modal>
       )}
 
-      <AppLayout currentPage={currentPage} onPageChange={setCurrentPage} username={username} onLogout={handleLogout}>
+      <AppLayout currentPage={currentPage} onPageChange={handlePageChange} username={username} onLogout={handleLogout}>
         <CurrentComponent />
       </AppLayout>
     </>

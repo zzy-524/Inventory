@@ -39,3 +39,9 @@ body {
   max-height: 400px;
   overflow-y: auto;
 }
+
+/* 已删除商品行灰显 */
+.row-disabled td {
+  opacity: 0.5;
+  background: #f5f5f5 !important;
+}

@@ -1,20 +1,27 @@
 import { useEffect, useState } from 'react';
 import { Layout, Menu, Tag, Tooltip, message, Dropdown } from 'antd';
 import {
-  InboxOutlined, BarChartOutlined, UserOutlined, HomeOutlined,
-  FileTextOutlined, CopyOutlined, LogoutOutlined, SettingOutlined,
+  InboxOutlined, BarChartOutlined, UserOutlined, HomeOutlined, ToolOutlined,
+  FileTextOutlined, CopyOutlined, LogoutOutlined, CloudUploadOutlined, TableOutlined,
 } from '@ant-design/icons';
 import { systemApi } from '../api';
 
 const { Header, Sider, Content } = Layout;
 
-const commonMenus = [
+const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__ !== undefined;
+
+const allMenuItems = [
+  { key: 'reports', icon: BarChartOutlined, label: '首页' },
+  { key: 'ledger', icon: TableOutlined, label: '台账' },
   { key: 'inventory', icon: HomeOutlined, label: '库存管理' },
   { key: 'products', icon: InboxOutlined, label: '商品管理' },
   { key: 'departments', icon: UserOutlined, label: '部门管理' },
-  { key: 'operators', icon: FileTextOutlined, label: '操作人管理' },
-  { key: 'reports', icon: BarChartOutlined, label: '统计报表' },
+  { key: 'operators', icon: FileTextOutlined, label: '操作人管理', tauriOnly: true },
+  { key: 'fixedAssets', icon: ToolOutlined, label: '固定资产' },
+  { key: 'backup', icon: CloudUploadOutlined, label: '数据备份' },
 ];
+
+const menuItems = allMenuItems.filter(item => !item.tauriOnly || isTauri);
 
 interface LayoutProps {
   currentPage: string;
@@ -26,7 +33,6 @@ interface LayoutProps {
 
 export default function AppLayout({ currentPage, onPageChange, children, username, onLogout }: LayoutProps) {
   const [lanUrl, setLanUrl] = useState('');
-  const isAdmin = username === 'admin';
 
   useEffect(() => {
     systemApi.getInfo().then(res => {
@@ -41,11 +47,6 @@ export default function AppLayout({ currentPage, onPageChange, children, usernam
       message.success('已复制，分享给局域网其他电脑');
     } catch { message.error('复制失败'); }
   };
-
-  const menuItems: { key: string; icon: React.ReactNode; label: string }[] = [
-    ...commonMenus.map(m => ({ key: m.key, icon: <m.icon />, label: m.label })),
-    ...(isAdmin ? [{ key: 'accounts', icon: <SettingOutlined />, label: '账号管理' }] : []),
-  ];
 
   return (
     <Layout>
@@ -75,7 +76,7 @@ export default function AppLayout({ currentPage, onPageChange, children, usernam
         <Sider theme="dark" style={{ background: '#001529' }}>
           <Menu mode="inline" selectedKeys={[currentPage]}
             style={{ height: '100%', borderRight: 0 }}
-            items={menuItems.map(item => ({ key: item.key, icon: item.icon, label: item.label }))}
+            items={menuItems.map(item => ({ key: item.key, icon: <item.icon />, label: item.label }))}
             onClick={({ key }) => onPageChange(key)}
           />
         </Sider>

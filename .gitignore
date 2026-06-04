@@ -8,4 +8,5 @@ data.json
 .DS_Store
 src-tauri/target/
 src-tauri/gen/
+node.exe
 *.log

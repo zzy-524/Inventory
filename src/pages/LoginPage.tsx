@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Card, Form, Input, Button, message, Modal } from 'antd';
 import { UserOutlined, LockOutlined, LaptopOutlined } from '@ant-design/icons';
+import { authApi, operatorApi } from '../api';
 
 interface LoginPageProps {
   onLogin: (token: string, username: string) => void;
@@ -8,7 +9,6 @@ interface LoginPageProps {
 
 /** 是否在 Tauri 桌面客户端内 */
 const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__ !== undefined;
-const API = isTauri ? 'http://localhost:8888' : '';
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [loading, setLoading] = useState(false);
@@ -19,16 +19,20 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const handleLogin = async (values: { username: string; password: string }) => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      });
-      const data = await res.json();
-      if (!res.ok) return message.error(data.error || '登录失败');
-      onLogin(data.token, data.username);
-    } catch {
-      message.error('无法连接到服务器');
+      // 先尝试管理员登录
+      try {
+        const res = await authApi.login(values.username, values.password);
+        onLogin(res.data.token, res.data.username);
+        return;
+      } catch {
+        // 管理员登录失败，尝试操作人登录
+      }
+
+      const opRes = await operatorApi.login(values.username, values.password);
+      onLogin(opRes.data.token, values.username);
+    } catch (e: unknown) {
+      const err = e as { error?: string; message?: string };
+      message.error(typeof err === 'string' ? err : (err.error || err.message || '登录失败'));
     } finally {
       setLoading(false);
     }
@@ -38,18 +42,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     if (values.password !== values.confirm) return message.error('两次密码不一致');
     setRegLoading(true);
     try {
-      const res = await fetch(`${API}/api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: values.username, password: values.password }),
-      });
-      const data = await res.json();
-      if (!res.ok) return message.error(data.error || '注册失败');
+      await authApi.register(values.username, values.password);
       message.success('注册成功，请登录');
       setRegisterVisible(false);
       regForm.resetFields();
-    } catch {
-      message.error('无法连接到服务器');
+    } catch (e: unknown) {
+      const err = e as { error?: string; message?: string };
+      message.error(typeof err === 'string' ? err : (err.error || err.message || '注册失败'));
     } finally {
       setRegLoading(false);
     }
