@@ -357,6 +357,20 @@ fn cmd_restore(
     Ok(serde_json::json!({ "success": true, "count": count }))
 }
 
+#[tauri::command]
+fn cmd_save_file(
+    filepath: String,
+    content: Vec<u8>,
+) -> Result<serde_json::Value, String> {
+    // ensure parent directory exists
+    if let Some(parent) = std::path::Path::new(&filepath).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(&filepath, &content)
+        .map_err(|e| format!("保存文件失败: {}", e))?;
+    Ok(serde_json::json!({ "path": filepath }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let store = Arc::new(Store::new());
@@ -366,15 +380,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(store)
         .manage(ServerInfo {
             local_url,
             lan_urls: Arc::new(lan_urls),
-        })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                let _ = window.hide();
-            }
         })
         .invoke_handler(tauri::generate_handler![
             cmd_login,
@@ -410,6 +420,7 @@ pub fn run() {
             cmd_backup,
             cmd_restore,
             cmd_clear_all,
+            cmd_save_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

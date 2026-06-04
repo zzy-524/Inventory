@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Table, Select, Space, Button, Dropdown, message, Card, Radio } from 'antd';
 import { DownloadOutlined, FileExcelOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { Product, Department, StockRecord } from '../types';
-import { productApi, departmentApi, stockRecordApi } from '../api';
+import { productApi, departmentApi, stockRecordApi, saveFile } from '../api';
 import * as XLSX from 'xlsx';
 
 interface LedgerRow {
@@ -145,7 +145,7 @@ export default function LedgerPage() {
         const titleCell = XLSX.utils.encode_cell({ r: 0, c: 0 });
         ws[titleCell] = { v: title, t: 's', s: { font: { bold: true, sz: 18 }, alignment: { horizontal: 'center' } } };
         if (format === 'csv') {
-          downloadBlob(new Blob(['﻿' + [h2].concat(dataRows).map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8' }), `${title}.csv`);
+          saveFile('﻿' + [h2, ...dataRows].map(r => r.map(String).join(',')).join('\n'), `${title}.csv`);
         } else {
           XLSX.utils.book_append_sheet(wb, ws, '月度汇总');
         }
@@ -207,26 +207,18 @@ export default function LedgerPage() {
           const csvH = ['物品名称', '规格型号', '单位', '期初库存数量合计',
             ...Array.from({length:wc}, (_,i) => `入库第${i+1}周`), '入库合计',
             ...Array.from({length:wc}, (_,i) => `出库第${i+1}周`), '出库合计', '期末库存数量合计'];
-          downloadBlob(new Blob(['﻿' + [csvH].concat(dataRows).map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8' }), `${title}(周明细).csv`);
+          saveFile('﻿' + [csvH, ...dataRows].map(r => r.map(String).join(',')).join('\n'), `${title}(周明细).csv`);
         } else {
           XLSX.utils.book_append_sheet(wb, ws, '周明细');
         }
       }
 
       if (format === 'xlsx') {
-        const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        downloadBlob(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${title}.xlsx`);
+        saveFile(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), `${title}.xlsx`);
       }
       message.success('导出成功');
     } catch { message.error('导出失败'); }
   };
-
-  function downloadBlob(blob: Blob, filename: string) {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  }
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);

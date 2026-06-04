@@ -20,9 +20,9 @@ pub struct Operator {
     pub id: u64,
     pub name: String,
     pub username: String,
-    #[serde(skip_serializing)]
+    #[serde(default)]
     pub password: String,
-    #[serde(skip_serializing)]
+    #[serde(default)]
     pub salt: String,
     pub department_id: Option<u64>,
     pub created_at: String,
@@ -170,14 +170,33 @@ impl Store {
     fn load(path: &PathBuf) -> StoreData {
         match fs::read_to_string(path) {
             Ok(content) => {
-                let mut data: StoreData =
-                    serde_json::from_str(&content).unwrap_or_else(|_| StoreData::default_data());
+                let mut data: StoreData = match serde_json::from_str(&content) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("[store] 数据文件解析失败: {}，备份后重新初始化", e);
+                        // 备份损坏的数据文件，避免数据完全丢失
+                        let bak = path.with_extension("json.bak");
+                        let _ = fs::write(&bak, &content);
+                        StoreData::default_data()
+                    }
+                };
+                let mut changed = false;
                 // Initialize users if empty
                 if data.users.is_empty() {
                     Self::create_default_admin(&mut data);
+                    changed = true;
                 }
+                // ensure_admin_operator: handles both missing admin and legacy empty password
+                let admin_needs_repair = data.operators.iter()
+                    .any(|o| o.username == "admin" && (o.password.is_empty() || o.salt.is_empty()));
+                let had_admin = data.operators.iter().any(|o| o.username == "admin");
                 Self::ensure_admin_operator(&mut data);
-                let _ = Self::save_internal(path, &data);
+                if !had_admin || admin_needs_repair {
+                    changed = true;
+                }
+                if changed {
+                    let _ = Self::save_internal(path, &data);
+                }
                 data
             }
             Err(_) => {
@@ -191,10 +210,25 @@ impl Store {
     }
 
     fn ensure_admin_operator(data: &mut StoreData) {
-        if !data.operators.iter().any(|o| o.username == "admin") {
+        if let Some(op) = data.operators.iter_mut().find(|o| o.username == "admin") {
+            // 兼容旧数据：如果 password/salt 为空，重新生成
+            if op.password.is_empty() || op.salt.is_empty() {
+                use sha2::{Digest, Sha256};
+                use rand::Rng;
+                let salt: String = rand::thread_rng()
+                    .sample_iter(&rand::distributions::Alphanumeric)
+                    .take(32)
+                    .map(char::from)
+                    .collect();
+                let mut hasher = Sha256::new();
+                hasher.update(b"admin");
+                hasher.update(salt.as_bytes());
+                op.password = format!("{:x}", hasher.finalize());
+                op.salt = salt;
+            }
+        } else {
             let id = data.next_id;
             data.next_id += 1;
-            // Generate a random password hash for the admin operator
             use sha2::{Digest, Sha256};
             use rand::Rng;
             let salt: String = rand::thread_rng()

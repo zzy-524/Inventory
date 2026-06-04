@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Button, Upload, message, Modal, Result, Select, Form, Space } from 'antd';
 import { DownloadOutlined, UploadOutlined, ExclamationCircleOutlined, DatabaseOutlined, DeleteOutlined } from '@ant-design/icons';
-import { backupApi, departmentApi, productApi, stockRecordApi } from '../api';
+import { backupApi, departmentApi, productApi, stockRecordApi, saveFile } from '../api';
 import type { Department } from '../types';
 import type { UploadProps } from 'antd';
 import * as XLSX from 'xlsx';
@@ -39,9 +39,8 @@ export default function BackupManagement() {
       setLoading(true);
       const res = await backupApi.export();
       const json = JSON.stringify(res.data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
       const now = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      downloadBlob(blob, `inventory-backup-${now}.json`);
+      saveFile(json, `inventory-backup-${now}.json`);
       message.success('数据备份导出成功');
     } catch { message.error('导出失败'); }
     finally { setLoading(false); }
@@ -213,12 +212,6 @@ export default function BackupManagement() {
     return false;
   };
 
-  function downloadBlob(blob: Blob, filename: string) {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  }
 
   const restoreProps: UploadProps = { accept: '.json', showUploadList: false, beforeUpload: (f) => { handleRestore(f); return false; } };
   const initProps: UploadProps = { accept: '.xlsx,.xls', showUploadList: false, beforeUpload: (f) => { handleDataInit(f); return false; } };

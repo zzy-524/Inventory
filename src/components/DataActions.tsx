@@ -1,6 +1,6 @@
 import { Button, Dropdown, Upload, message, Space } from 'antd';
 import { DownloadOutlined, UploadOutlined, FileExcelOutlined, FileTextOutlined } from '@ant-design/icons';
-import { exportApi } from '../api';
+import { exportApi, saveFile } from '../api';
 import type { UploadProps } from 'antd';
 
 interface DataActionsProps {
@@ -12,15 +12,14 @@ export default function DataActions({ pageKey, onDataImported }: DataActionsProp
   const handleExport = async (format: 'json' | 'csv') => {
     try {
       const response = await exportApi.exportData(pageKey, format);
-      const blob = new Blob([response.data]);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${pageKey}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      const rd = response.data;
+      if (rd instanceof Blob) {
+        await saveFile(new Uint8Array(await rd.arrayBuffer()), `${pageKey}.${format}`);
+      } else {
+        // Tauri 模式: { data: string, filename: string }
+        const d = rd as { data: string; filename: string };
+        await saveFile(d.data, d.filename);
+      }
       message.success(`导出成功 (${format.toUpperCase()})`);
     } catch {
       message.error('导出失败');

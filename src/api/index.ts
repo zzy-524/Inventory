@@ -209,3 +209,30 @@ export const backupApi = {
 };
 
 export default api;
+
+/** 统一的文件下载/保存：Tauri 模式弹出保存对话框选择位置，浏览器模式触发下载 */
+export async function saveFile(content: Uint8Array | string, filename: string): Promise<void> {
+  if (isTauri) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const filepath = await save({
+      defaultPath: filename,
+      title: '保存文件',
+    });
+    if (!filepath) return; // user cancelled
+    const bytes = typeof content === 'string' ? new TextEncoder().encode(content) : content;
+    await invoke('cmd_save_file', { filepath, content: bytes });
+    return;
+  }
+  // 浏览器模式：blob URL 触发下载
+  const blob = typeof content === 'string'
+    ? new Blob([content], { type: 'text/plain;charset=utf-8' })
+    : new Blob([content]);
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}

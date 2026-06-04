@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, Select, InputNumber, message, Space, Tag, Upload, Dropdown } from 'antd';
 import { PlusOutlined, DeleteOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, FileExcelOutlined, FileTextOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { Product, Department } from '../types';
-import { productApi, departmentApi } from '../api';
+import { productApi, departmentApi, saveFile } from '../api';
 import * as XLSX from 'xlsx';
 import type { UploadProps } from 'antd';
 
@@ -106,8 +106,7 @@ export default function ProductManagement() {
             }).join(','))
           : [];
         const csv = '﻿' + PRODUCT_HEADERS.join(',') + '\n' + rows.join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-        downloadBlob(blob, `商品列表_${today}.csv`);
+        saveFile(csv, `商品列表_${today}.csv`);
       } else {
         const sheetData = exportData.length > 0
           ? exportData
@@ -115,20 +114,12 @@ export default function ProductManagement() {
         const ws = XLSX.utils.json_to_sheet(exportData.length > 0 ? exportData : [sheetData]);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, '商品列表');
-        const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        downloadBlob(blob, `商品列表_${today}.xlsx`);
+        saveFile(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), `商品列表_${today}.xlsx`);
       }
       message.success(`导出成功 (${format.toUpperCase()})`);
     } catch { message.error('导出失败'); }
   };
 
-  function downloadBlob(blob: Blob, filename: string) {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  }
 
   // ====== 导入 ======
   const handleImportFile = (file: File) => {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, Select, InputNumber, DatePicker, message, Space, Upload, Dropdown } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, DownloadOutlined, UploadOutlined, FileExcelOutlined, FileTextOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { FixedAsset, Department } from '../types';
-import { fixedAssetApi, departmentApi } from '../api';
+import { fixedAssetApi, departmentApi, saveFile } from '../api';
 import * as XLSX from 'xlsx';
 import type { UploadProps } from 'antd';
 import dayjs from 'dayjs';
@@ -117,20 +117,16 @@ export default function FixedAssetManagement() {
       const today = new Date().toISOString().slice(0, 10);
       if (format === 'csv') {
         const rows = exportData.length > 0 ? exportData.map(r => keys.map(k => { const v = String(r[k] ?? ''); return v.includes(',') ? `"${v}"` : v; }).join(',')) : [];
-        downloadBlob(new Blob(['﻿' + keys.join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8' }), `固定资产${deptLabel}_${today}.csv`);
+        saveFile('﻿' + keys.join(',') + '\n' + rows.join('\n'), `固定资产${deptLabel}_${today}.csv`);
       } else {
         const ws = XLSX.utils.json_to_sheet(exportData.length > 0 ? exportData : [keys.reduce((o, k) => ({ ...o, [k]: '' }), {} as Record<string, string>)]);
         const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '固定资产');
-        downloadBlob(new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `固定资产${deptLabel}_${today}.xlsx`);
+        saveFile(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), `固定资产${deptLabel}_${today}.xlsx`);
       }
       message.success('导出成功');
     } catch { message.error('导出失败'); }
   };
 
-  function downloadBlob(blob: Blob, filename: string) {
-    const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url);
-  }
 
   /** 解析导入行并映射字段 */
   function parseImportRow(rawRow: Record<string, string>) {
